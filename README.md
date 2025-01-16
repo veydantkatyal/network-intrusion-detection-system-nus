@@ -179,8 +179,8 @@ This project is licensed under->[MIT License](https://github.com/veydantkatyal/n
 
 ## Contributors
 - **[Veydant Katyal](https://github.com/veydantkatyal)**  
-- **[Spurthi Bhat](https://github.com/spurthibhat13)**  
+- **[Spurthi Bhat](https://github.com/spurthibhat13)**
+- **[Vishal RS](https://github.com/vrs-03)**  
 - **[Shreya Sethu](https://github.com/shreyasethu)**  
-- **[Aarav Patel](https://github.com/aaravpatel0409)**
-- **Vishal RS**
-- **Noorul Hassan**  
+- **[Aarav Patel](https://github.com/aaravp0406)**
+- **[Noorul Hassan](https://github.com/noorul23)**  
