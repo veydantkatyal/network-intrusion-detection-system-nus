@@ -1,61 +1,104 @@
+# dashboard.py
 import streamlit as st
 import pandas as pd
-import numpy as np
-import pickle
-from tensorflow.keras.models import load_model
+import plotly.express as px
+from scapy.all import sniff, IP, TCP, UDP  # Explicit protocol imports
+from collections import defaultdict
+import time
+import threading
 
-# Load models
-@st.cache_resource
-def load_pickle_model(path):
-   with open(path, 'rb') as file:
-       return pickle.load(file)
+class PacketProcessor:
+    """Process and analyze network packets"""
+    def __init__(self):
+        self.protocol_map = {1: 'ICMP', 6: 'TCP', 17: 'UDP'}
+        self.packet_data = []
+        self.start_time = time.time()
+        self.lock = threading.Lock()
 
-@st.cache_resource
-def load_keras_model(path):
-   return load_model(path)
+    def get_protocol_name(self, protocol_num):
+        return self.protocol_map.get(protocol_num, f'OTHER({protocol_num})')
 
-logistic_regression_model = load_pickle_model('Binary/Logistic_Regression.pkl')
-random_forest_model = load_pickle_model('Binary/Random_Forest.pkl')
-cnn_model = load_keras_model('MultiClass/cnn_model.h5')
-ann_model = load_keras_model('MultiClass/ann_model.h5')
-cnn_explainable_model = load_keras_model('Explainable/cnn_model_explainable.h5')
-ann_explainable_model = load_keras_model('Explainable/ann_model_explainable.h5')
+    def process_packet(self, packet):
+        try:
+            if packet.haslayer(IP):  # Updated layer check
+                ip_layer = packet[IP]
+                with self.lock:
+                    packet_info = {
+                        'timestamp': time.time(),
+                        'source': ip_layer.src,
+                        'destination': ip_layer.dst,
+                        'protocol': self.get_protocol_name(ip_layer.proto),
+                        'size': len(packet)
+                    }
+                    
+                    # TCP/UDP detection
+                    if packet.haslayer(TCP):
+                        tcp_layer = packet[TCP]
+                        packet_info.update({
+                            'src_port': tcp_layer.sport,
+                            'dst_port': tcp_layer.dport
+                        })
+                    elif packet.haslayer(UDP):
+                        udp_layer = packet[UDP]
+                        packet_info.update({
+                            'src_port': udp_layer.sport,
+                            'dst_port': udp_layer.dport
+                        })
+                    
+                    self.packet_data.append(packet_info)
+                    if len(self.packet_data) > 1000:
+                        self.packet_data.pop(0)
+        except Exception as e:
+            pass
 
-# User interface
-st.title('Model Testing Web App')
+    def get_dataframe(self):
+        with self.lock:
+            return pd.DataFrame(self.packet_data)
 
-model_type = st.selectbox('Select Model Type', ('Binary', 'MultiClass', 'Explainable'))
-model_name = st.selectbox('Select Model', {
-   'Binary': ['Logistic Regression', 'Random Forest'],
-   'MultiClass': ['CNN', 'ANN'],
-   'Explainable': ['CNN Explainable', 'ANN Explainable']
-}[model_type])
+def start_packet_capture():
+    processor = PacketProcessor()
+    def capture_packets():
+        sniff(prn=processor.process_packet, store=False)
+    threading.Thread(target=capture_packets, daemon=True).start()
+    return processor
 
-uploaded_file = st.file_uploader('Upload CSV for prediction', type='csv')
+def main():
+    st.set_page_config(page_title="Network Monitor", layout="wide")
+    st.title("Real-time Network Traffic Dashboard")
+    
+    if 'processor' not in st.session_state:
+        st.session_state.processor = start_packet_capture()
+    
+    df = st.session_state.processor.get_dataframe()
+    
+    # Display metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total Packets", len(df))
+    with col2:
+        st.metric("Unique Sources", df['source'].nunique() if not df.empty else 0)
+    with col3:
+        st.metric("Data Volume", f"{df['size'].sum()/1024:.2f} KB" if not df.empty else "0 KB")
+    
+    # Visualizations
+    if not df.empty:
+        st.subheader("Protocol Distribution")
+        protocol_counts = df['protocol'].value_counts()
+        fig1 = px.pie(protocol_counts, names=protocol_counts.index, values=protocol_counts.values)
+        st.plotly_chart(fig1, use_container_width=True)
+        
+        st.subheader("Traffic Over Time")
+        df['time'] = pd.to_datetime(df['timestamp'], unit='s')
+        time_counts = df.resample('2s', on='time').size()
+        fig2 = px.line(time_counts, title="Packets per 2 Seconds")
+        st.plotly_chart(fig2, use_container_width=True)
+    
+    # Auto-refresh every 2 seconds
+    time.sleep(2)
+    st.rerun()
 
-if uploaded_file:
-   data = pd.read_csv(uploaded_file)
-   st.write('Uploaded Data:')
-   st.write(data.head())
-
-   if st.button('Predict'):
-       if model_type == 'Binary':
-           if model_name == 'Logistic Regression':
-               model = logistic_regression_model
-           else:
-               model = random_forest_model
-       elif model_type == 'MultiClass':
-           if model_name == 'CNN':
-               model = cnn_model
-           else:
-               model = ann_model
-       else:
-           if model_name == 'CNN Explainable':
-               model = cnn_explainable_model
-           else:
-               model = ann_explainable_model
-
-       # Make predictions
-       predictions = model.predict(data)
-       st.write('Predictions:')
-       st.write(predictions)
+if __name__ == "__main__":
+    # Quick protocol test
+    test_packet = IP()/TCP(dport=80)
+    assert test_packet.haslayer(IP) and test_packet.haslayer(TCP), "Protocol test failed!"
+    main()
