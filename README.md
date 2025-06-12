@@ -12,7 +12,7 @@ A ML/DL solution using XAI to detect and classify network intrusions in real-tim
 7. [Challenges Faced](#setup-instructions)
 8. [Project Workflow](#project-workflow)
 9. [Results](#results)
-10. [Future Enhancements](#future-enhancements)
+10. [Streamlit UI](#streamlit-ui)
 11. [LICENSE](#license)
 12. [Contributors](#contributors)
 
@@ -165,10 +165,9 @@ Run the following command to start the Streamlit app:
 
 ---
 
-## Future Enhancements
-- Integration with live network traffic for real-time monitoring.
-- Expanding multi-class capabilities with more granular attack types.
-- Scale the system for large-scale deployment using AWS and commercialize it
+## Streamlit UI
+![](./images/ui-1.png)
+![](./images/ui-2.png)
 
 ---
 
